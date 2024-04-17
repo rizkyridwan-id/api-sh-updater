@@ -1,0 +1,28 @@
+{
+  "name": "api-updater",
+  "version": "1.0.0",
+  "description": "Simple node js app for updating using pre build sh in server",
+  "main": "./src/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rizkyridwan-id/api-sh-updater.git"
+  },
+  "keywords": [
+    "api",
+    "sh-updater"
+  ],
+  "author": "rizkyridwan-id",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/rizkyridwan-id/api-sh-updater/issues"
+  },
+  "homepage": "https://github.com/rizkyridwan-id/api-sh-updater#readme",
+  "dependencies": {
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5",
+    "zod": "^3.22.4"
+  }
+}

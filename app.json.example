@@ -1,0 +1,6 @@
+[
+    {
+        "name": "Application Name",
+        "sh_path": "path/to/file.sh"
+    }
+]
