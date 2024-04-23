@@ -58,14 +58,14 @@ class AppService {
             SocketIoHelper.io.to(app.name).emit("update-progress",{status: "FINISH", message: ` child process exited with code ${code}`})
 
             const logMsg = `[${new Date().toISOString()}] Name: ${app.name}`
-            fs.writeFile(path.resolve("../../updated-app.log"), logMsg, {flag: "a"})
+            fs.writeFile(path.resolve("./updated-app.log"), logMsg, {flag: "a"}).then(() => console.log("App registered to log."))
             if(code === 0)
                 res.status(200).send({code})
         });
     }
 
     getUpdateHistory(req, res) {
-        fs.readFile("../../updated-app.log", {encoding: "utf8"})
+        fs.readFile("./updated-app.log", {encoding: "utf8"})
             .then((data) => res.status(200).send(data))
             .catch((error) => {
                 console.log("[ERROR](getUpdateHistory)", error.message)
