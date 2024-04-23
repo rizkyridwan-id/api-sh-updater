@@ -1,7 +1,9 @@
 const { spawn } = require("child_process");
 const readline = require('readline')
 const appList = require('../../../app.json')
-const SocketIoHelper = require("../../helper/socket-io.helper")
+const SocketIoHelper = require("../../helper/socket-io.helper");
+const path = require("path");
+const fs = require("fs").promises
 
 class AppService {
     updateQueue = []
@@ -55,9 +57,20 @@ class AppService {
 
             SocketIoHelper.io.to(app.name).emit("update-progress",{status: "FINISH", message: ` child process exited with code ${code}`})
 
+            const logMsg = `[${new Date().toISOString()}] Name: ${app.name}`
+            fs.writeFile(path.resolve("../../updated-app.log"), logMsg, {flag: "a"})
             if(code === 0)
                 res.status(200).send({code})
         });
+    }
+
+    getUpdateHistory(req, res) {
+        fs.readFile("../../updated-app.log", {encoding: "utf8"})
+            .then((data) => res.status(200).send(data))
+            .catch((error) => {
+                console.log("[ERROR](getUpdateHistory)", error.message)
+                res.status(500).send("Something went wrong. please check server log.")
+            })
     }
 }
 
