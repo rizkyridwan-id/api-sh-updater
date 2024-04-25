@@ -1,6 +1,8 @@
 [
     {
         "name": "Application Name",
-        "sh_path": "path/to/file.sh"
+        "sh_path": "path/to/file.sh",
+        "link_qc": "https://link-to-qc.com",
+        "is_branch_avail": false
     }
 ]
