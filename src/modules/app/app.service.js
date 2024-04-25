@@ -8,7 +8,11 @@ const fs = require("fs").promises
 class AppService {
     updateQueue = []
     getAppNames(req, res) {
-        const appNames = appList.map( it => it.name)
+        const appNames = appList.map( it => ({
+            name: it.name,
+            link_qc: it.link_qc,
+            is_branch_avail: it.is_branch_avail
+        }))
         res.status(200).send({names: appNames})
     }
 
@@ -17,7 +21,7 @@ class AppService {
     }
 
     updateApp(req, res) {
-        const {name, branchBe, branchFe} = req.body
+        const {name, branchBe = "", branchFe = ""} = req.body
         const app = appList.find(it => it.name === name)
         if(!app) {
             return res.status(404).send({message: "App Name is not registered"})
@@ -31,6 +35,11 @@ class AppService {
     }
 
     runSh(app, branchBe, branchFe, res) {
+        if(branchBe && branchFe) {
+            console.log("[INFO] BRANCH INFO")
+            console.log("BranchBe:", branchBe)
+            console.log("BranchFe:", branchFe)
+        }
         const sh = spawn("sh", [app.sh_path, branchBe, branchFe]);
         this.updateQueue.push(app.name)
 
@@ -49,19 +58,38 @@ class AppService {
         });
 
         sh.on("close", (code) => {
-            console.log(`[SH][FINISH] child process exited with code ${code}`);
             const queueIndex = this.updateQueue.findIndex(it => it === app.name)
-            console.log("[SH][FINISH] Index Finish:", queueIndex)
             this.updateQueue.splice(queueIndex, 1)
+
+            console.log(`[SH][FINISH] child process exited with code ${code}`);
             console.log("[SH][FINISH] Cleaned Queue:", this.updateQueue)
 
-            SocketIoHelper.io.to(app.name).emit("update-progress",{status: "FINISH", message: ` child process exited with code ${code}`})
+            
+            if(code === 0) {
+                const logMsg = `[${new Date().toISOString()}] Name: ${app.name}`
+                fs.writeFile(path.resolve("./updated-app.log"), logMsg, {flag: "a"}).then(() => console.log("App registered to log."))
+            }
 
-            const logMsg = `[${new Date().toISOString()}] Name: ${app.name}`
-            fs.writeFile(path.resolve("./updated-app.log"), logMsg, {flag: "a"}).then(() => console.log("App registered to log."))
-            if(code === 0)
-                res.status(200).send({code})
+            const statusSocket = code ? "ERROR" : "FINISH"
+            const httpStatus = code ? 500 : 200
+            const response = {
+                code,
+                message: this._generateMessageResponse(code)
+            }
+            
+            SocketIoHelper.io.to(app.name).emit("update-progress",{status: statusSocket, message: ` child process exited with code ${code}`})
+            res.status(httpStatus).send(response)
         });
+    }
+
+    _generateMessageResponse(code) {
+        return code === 0 
+            ? "Updated Success." 
+            : code === 1 
+                ? "Internal Script Error" 
+                : code === 2 
+                    ? "Backend Script Error" 
+                    : "Frontend Script Error"
     }
 
     getUpdateHistory(req, res) {
