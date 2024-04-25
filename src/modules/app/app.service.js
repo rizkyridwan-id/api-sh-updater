@@ -51,22 +51,19 @@ class AppService {
           });
 
         sh.stderr.on("data", (error) => {
-            console.error(`[SH][ERROR]: ${error}`);
+            console.error(`[SH][UPDATE][ERROR]: ${error}`);
             SocketIoHelper.io.to(app.name).emit("update-progress",{status: "ERROR", message: error})
-
-            res.status(500).send(error)
         });
 
         sh.on("close", (code) => {
             const queueIndex = this.updateQueue.findIndex(it => it === app.name)
             this.updateQueue.splice(queueIndex, 1)
 
-            console.log(`[SH][FINISH] child process exited with code ${code}`);
-            console.log("[SH][FINISH] Cleaned Queue:", this.updateQueue)
-
+            console.log(`[SH][UPDATE][FINISH] ChildProcessStatusCode: ${code}`);
+            console.log("[SH][UPDATE][FINISH] CleanedQueue:", app.name)
             
             if(code === 0) {
-                const logMsg = `[${new Date().toISOString()}] Name: ${app.name}`
+                const logMsg = `[${new Date().toISOString()}] Name: ${app.name}\n`
                 fs.writeFile(path.resolve("./updated-app.log"), logMsg, {flag: "a"}).then(() => console.log("App registered to log."))
             }
 
@@ -99,6 +96,50 @@ class AppService {
                 console.log("[ERROR](getUpdateHistory)", error.message)
                 res.status(500).send("Something went wrong. please check server log.")
             })
+    }
+
+    showGitLog(req, res) {
+        const {name} = req.body
+        const app = appList.find(it => it.name === name)
+        if(!app) {
+            return res.status(404).send({message: "App Name is not registered."})
+        }
+
+        if(!app.project_dir) {
+            return res.status(409).send({message: "`project_dir` is not set."})
+        }
+
+        this.runGitLog(app, res)
+    }
+
+    runGitLog(app, res) {
+        const option = {
+            cwd: app.project_dir
+        }
+        const sh = spawn("git", ["--no-pager","log","--decorate=short","-n10"], option);
+        readline.createInterface({
+            input: sh.stdout,
+            terminal: false
+        }).on("line", function(line) {
+            SocketIoHelper.io.to(app.name).emit("git-log", {status: "PROGRESS", message: line})
+        })
+
+        sh.stderr.on("data", (error) => {
+            console.error(`[SH][GITLOG][ERROR]: ${error.toString().trim()}`);
+            SocketIoHelper.io.to(app.name).emit("git-log", {status: "PROGRESS", message: error.toString().trim()})
+        })
+
+        sh.on("close", (code) => {
+            console.log(`[SH][GITLOG][FINISH] ChildProcessStatusCode: ${code}`);
+            const statusSocket = code ? "ERROR" : "FINISH"
+            const httpStatus = code ? 500 : 200
+            const response = {
+                code,
+            }
+
+            SocketIoHelper.io.to(app.name).emit("git-log", {status: statusSocket, message: `child process exited with code ${code}`})
+            res.status(httpStatus).send(response)
+        })
     }
 }
 

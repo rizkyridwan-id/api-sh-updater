@@ -2,6 +2,7 @@
     {
         "name": "Application Name",
         "sh_path": "path/to/file.sh",
+        "project_dir": "path/to/project.sh",
         "link_qc": "https://link-to-qc.com",
         "is_branch_avail": false
     }
