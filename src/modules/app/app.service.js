@@ -3,7 +3,8 @@ const readline = require('readline')
 const appList = require('../../../app.json')
 const SocketIoHelper = require("../../helper/socket-io.helper");
 const path = require("path");
-const fs = require("fs").promises
+const fs = require("fs");
+const { DateFormatValueObject } = require("./value-object/date-format.value-object");
 
 class AppService {
     updateQueue = []
@@ -35,10 +36,10 @@ class AppService {
     }
 
     runSh(app, branchBe, branchFe, res) {
+        console.log(`[SH][UPDATE][INFO] ${app.name} is updating.`)
         if(branchBe && branchFe) {
-            console.log("[INFO] BRANCH INFO")
-            console.log("BranchBe:", branchBe)
-            console.log("BranchFe:", branchFe)
+            console.log("[SH][UPDATE][INFO] BranchBe:", branchBe)
+            console.log("[SH][UPDATE][INFO] BranchFe:", branchFe)
         }
         const sh = spawn("sh", [app.sh_path, branchBe, branchFe]);
         this.updateQueue.push(app.name)
@@ -50,7 +51,9 @@ class AppService {
             SocketIoHelper.io.to(app.name).emit("update-progress",{status: "PROGRESS", message: line})
           });
 
+        let errorSh = ""
         sh.stderr.on("data", (error) => {
+            errorSh = error.toString()
             console.error(`[SH][UPDATE][ERROR]: ${error}`);
             SocketIoHelper.io.to(app.name).emit("update-progress",{status: "ERROR", message: error})
         });
@@ -62,11 +65,16 @@ class AppService {
             console.log(`[SH][UPDATE][FINISH] ChildProcessStatusCode: ${code}`);
             console.log("[SH][UPDATE][FINISH] CleanedQueue:", app.name)
             
-            if(code === 0) {
-                const logMsg = `[${new Date().toISOString()}] Name: ${app.name}\n`
-                fs.writeFile(path.resolve("./updated-app.log"), logMsg, {flag: "a"}).then(() => console.log("App registered to log."))
-            }
+            // Write file
+            const dateFormated = new Date().toISOString().slice(0, -5).replace("T", " ")
+            const reasonError = code !== 0 ? `(${errorSh || this._generateMessageResponse(code)})` : ""
+            const branchInfo = branchBe && branchFe ? `(HEAD ${branchBe}::${branchFe})` : ""
+            const logMsg = `[${dateFormated}] Name: ${app.name} | (code: ${code}) ${reasonError || branchInfo} \n`
+            fs.promises.writeFile(path.resolve(this._getLogFilePath()), logMsg, {flag: "a"})
+                .then(() => console.log("[SH][UPDATE][FINISH] Activity added to log history."))
+                .catch(e => console.log("[SH][UPDATE][ERROR]", e))
 
+            // Send Finish Socket
             const statusSocket = code ? "ERROR" : "FINISH"
             const httpStatus = code ? 500 : 200
             const response = {
@@ -82,15 +90,24 @@ class AppService {
     _generateMessageResponse(code) {
         return code === 0 
             ? "Updated Success." 
-            : code === 1 
-                ? "Internal Script Error" 
-                : code === 2 
-                    ? "Backend Script Error" 
-                    : "Frontend Script Error"
+            : code === 2
+                ? "Backend Script Error" 
+                : code === 3
+                    ? "Frontend Script Error" 
+                    : "Internal Script Error"
     }
 
     getUpdateHistory(req, res) {
-        fs.readFile("./updated-app.log", {encoding: "utf8"})
+        const {date} = req.query
+
+        const dateFormat = date && new DateFormatValueObject(date)
+        const filePath = this._getLogFilePath(dateFormat)
+
+        if(!fs.statSync(filePath, {throwIfNoEntry: false})) {
+            return res.status(404).send({message: "Log file is not registered."})
+        }
+
+        fs.promises.readFile(filePath, {encoding: "utf8"})
             .then((data) => res.status(200).send(data))
             .catch((error) => {
                 console.log("[ERROR](getUpdateHistory)", error.message)
@@ -140,6 +157,20 @@ class AppService {
             SocketIoHelper.io.to(app.name).emit("git-log", {status: statusSocket, message: `child process exited with code ${code}`})
             res.status(httpStatus).send(response)
         })
+    }
+
+    _getLogFilePath(dateFormat) {
+        const isLogsExists = fs.statSync("./logs", {throwIfNoEntry: false})
+        if(!isLogsExists) {
+            fs.mkdirSync("./logs")
+        }
+
+        let date = new Date().toISOString().split("T")[0]
+        if(dateFormat && (dateFormat instanceof DateFormatValueObject)) {
+            date = dateFormat.value
+        }
+
+        return path.join("./logs", date+"-updated-log.log")
     }
 }
 
